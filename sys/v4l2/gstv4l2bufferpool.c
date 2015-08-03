@@ -45,6 +45,7 @@
 #include "v4l2_calls.h"
 #include "gst/gst-i18n-plugin.h"
 #include <gst/glib-compat-private.h>
+#include <gst/v4l2/gstv4l2timecodemeta.h>
 
 GST_DEBUG_CATEGORY_STATIC (v4l2bufferpool_debug);
 GST_DEBUG_CATEGORY_STATIC (CAT_PERFORMANCE);
@@ -1260,6 +1261,11 @@ gst_v4l2_buffer_pool_dqbuf (GstV4l2BufferPool * pool, GstBuffer ** buffer)
   GST_BUFFER_TIMESTAMP (outbuf) = timestamp;
   GST_BUFFER_OFFSET (outbuf) = group->buffer.sequence;
   GST_BUFFER_OFFSET_END (outbuf) = group->buffer.sequence + 1;
+
+  if ((group->buffer.type == V4L2_BUF_TYPE_VIDEO_CAPTURE) &&
+      (group->buffer.flags & V4L2_BUF_FLAG_TIMECODE)) {
+    gst_buffer_add_gst_v4l2_timecode_meta (outbuf, &group->buffer.timecode);
+  }
 
 done:
   *buffer = outbuf;

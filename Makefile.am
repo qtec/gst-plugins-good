@@ -1,7 +1,7 @@
 DISTCHECK_CONFIGURE_FLAGS=--enable-gtk-doc
 
 ALWAYS_SUBDIRS =		\
-	gst sys ext 		\
+	gst gst-libs sys ext \
 	tests			\
 	docs			\
 	po			\

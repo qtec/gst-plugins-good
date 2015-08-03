@@ -318,21 +318,21 @@ dnl -Wundef: too many broken headers
 AG_GST_SET_ERROR_CFLAGS($FATAL_WARNINGS, [
       -Wmissing-declarations -Wmissing-prototypes -Wredundant-decls
       -Wwrite-strings -Wold-style-definition -Waggregate-return
-      -Winit-self -Wmissing-include-dirs -Waddress -Wno-multichar
+      -Winit-self -Wnomissing-include-dirs -Waddress -Wno-multichar
       -Wnested-externs $NO_WARNINGS])
 
 dnl define an ERROR_CXXFLAGS Makefile variable
 AG_GST_SET_ERROR_CXXFLAGS($FATAL_WARNINGS, [
         -Wmissing-declarations -Wredundant-decls
         -Wwrite-strings
-        -Winit-self -Wmissing-include-dirs -Waddress -Wno-multichar
+        -Winit-self -Wnomissing-include-dirs -Waddress -Wno-multichar
         $NO_WARNINGS])
 
 dnl define an ERROR_OBJCFLAGS Makefile variable
 AG_GST_SET_ERROR_OBJCFLAGS($FATAL_WARNINGS, [
       -Wmissing-declarations -Wmissing-prototypes -Wredundant-decls
       -Wwrite-strings -Wold-style-definition
-      -Winit-self -Wmissing-include-dirs -Wno-multichar
+      -Winit-self -Wnomissing-include-dirs -Wno-multichar
       -Wnested-externs $NO_WARNINGS])
 
 dnl define correct level for debugging messages
@@ -952,6 +952,12 @@ GST_OPTION_OBJCFLAGS="\$(WARNING_OBJCFLAGS) \$(ERROR_OBJCFLAGS) \$(DEBUG_CFLAGS)
 AC_SUBST(GST_OPTION_CFLAGS)
 AC_SUBST(GST_OPTION_CXXFLAGS)
 AC_SUBST(GST_OPTION_OBJCFLAGS)
+GST_PLUGINS_GOOD_CXXFLAGS="-I\$(top_srcdir)/gst-libs -I\$(top_builddir)/gst-libs"
+GST_PLUGINS_GOOD_OBJCFLAGS="-I\$(top_srcdir)/gst-libs -I\$(top_builddir)/gst-libs"
+GST_PLUGINS_GOOD_CFLAGS="-I\$(top_srcdir)/gst-libs -I\$(top_builddir)/gst-libs"
+AC_SUBST(GST_PLUGINS_GOOD_CFLAGS)
+AC_SUBST(GST_PLUGINS_GOOD_CXXFLAGS)
+AC_SUBST(GST_PLUGINS_GOOD_OBJCFLAGS)
 
 dnl our libraries need to be versioned correctly
 AC_SUBST(GST_LT_LDFLAGS)
@@ -1033,6 +1039,9 @@ gst/wavenc/Makefile
 gst/wavparse/Makefile
 gst/flx/Makefile
 gst/y4m/Makefile
+gst-libs/Makefile
+gst-libs/gst/Makefile
+gst-libs/gst/v4l2/Makefile
 ext/Makefile
 ext/aalib/Makefile
 ext/cairo/Makefile
