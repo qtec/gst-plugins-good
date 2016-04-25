@@ -115,6 +115,9 @@ static const GstV4L2FormatDesc gst_v4l2_formats[] = {
   {V4L2_PIX_FMT_Y16, TRUE, GST_V4L2_RAW},
   {V4L2_PIX_FMT_Y16_BE, TRUE, GST_V4L2_RAW},
   {V4L2_PIX_FMT_Y10BPACK, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_GREEN8, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_GREEN16, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_GREEN16_BE, TRUE, GST_V4L2_RAW},
 
   /* Palette formats */
   {V4L2_PIX_FMT_PAL8, TRUE, GST_V4L2_RAW},
@@ -444,6 +447,16 @@ gst_v4l2_object_install_properties_helper (GObjectClass * gobject_class,
           "containing G L or KC, case insensitive. e.g. flags=GKC",
           GST_TYPE_STRUCTURE, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstV4l2Src:useqtecgreen:
+   *
+   * Weather to use standard gray or custom gray
+   */
+  g_object_class_install_property (gobject_class, PROP_USE_QTEC_GREEN,
+      g_param_spec_boolean ("useqtecgreen", "Use QTec Green",
+          "When enabled, QTec green will be used instead of standard grey",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
 }
 
 void
@@ -519,6 +532,8 @@ gst_v4l2_object_new (GstElement * element,
   v4l2object->n_v4l2_planes = 0;
 
   v4l2object->no_initial_format = FALSE;
+
+  v4l2object->useqtecgreen = FALSE;
 
   return v4l2object;
 }
@@ -709,6 +724,9 @@ gst_v4l2_object_set_property_helper (GstV4l2Object * v4l2object,
             gst_structure_get_name (s));
       break;
     }
+    case PROP_USE_QTEC_GREEN:
+      v4l2object->useqtecgreen = g_value_get_boolean (value);
+      break;
     default:
       return FALSE;
       break;
@@ -808,6 +826,9 @@ gst_v4l2_object_get_property_helper (GstV4l2Object * v4l2object,
       break;
     case PROP_FORCE_ASPECT_RATIO:
       g_value_set_boolean (value, v4l2object->keep_aspect);
+      break;
+    case PROP_USE_QTEC_GREEN:
+      g_value_set_boolean (value, v4l2object->useqtecgreen);
       break;
     default:
       return FALSE;
@@ -1274,6 +1295,15 @@ gst_v4l2_object_v4l2fourcc_to_video_format (guint32 fourcc)
       format = GST_VIDEO_FORMAT_GRAY16_LE;
       break;
     case V4L2_PIX_FMT_Y16_BE:
+      format = GST_VIDEO_FORMAT_GRAY16_BE;
+      break;
+    case V4L2_PIX_FMT_QTEC_GREEN8:
+      format = GST_VIDEO_FORMAT_GRAY8;
+      break;
+    case V4L2_PIX_FMT_QTEC_GREEN16:
+      format = GST_VIDEO_FORMAT_GRAY16_LE;
+      break;
+    case V4L2_PIX_FMT_QTEC_GREEN16_BE:
       format = GST_VIDEO_FORMAT_GRAY16_BE;
       break;
     case V4L2_PIX_FMT_XRGB555:
@@ -1751,13 +1781,22 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
         fourcc_nc = V4L2_PIX_FMT_ABGR32;
         break;
       case GST_VIDEO_FORMAT_GRAY8:
-        fourcc = V4L2_PIX_FMT_GREY;
+        if (v4l2object->useqtecgreen)
+          fourcc = V4L2_PIX_FMT_QTEC_GREEN8;
+        else
+          fourcc = V4L2_PIX_FMT_GREY;
         break;
       case GST_VIDEO_FORMAT_GRAY16_LE:
-        fourcc = V4L2_PIX_FMT_Y16;
+        if (v4l2object->useqtecgreen)
+          fourcc = V4L2_PIX_FMT_QTEC_GREEN16;
+        else
+          fourcc = V4L2_PIX_FMT_Y16;
         break;
       case GST_VIDEO_FORMAT_GRAY16_BE:
-        fourcc = V4L2_PIX_FMT_Y16_BE;
+        if (v4l2object->useqtecgreen)
+          fourcc = V4L2_PIX_FMT_QTEC_GREEN16_BE;
+        else
+          fourcc = V4L2_PIX_FMT_Y16_BE;
         break;
       default:
         break;
