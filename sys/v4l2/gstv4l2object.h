@@ -174,6 +174,11 @@ struct _GstV4l2Object {
   /* Allow to skip reading initial format through G_FMT. Some devices
    * just fails if you don't call S_FMT first. (ex: M2M decoders) */
   gboolean no_initial_format;
+
+  /* selection api variables */
+  gboolean selection_api_available;
+  GstStructure *target_crop;
+  GstStructure *target_compose;
 };
 
 struct _GstV4l2ObjectClassHelper {
@@ -198,7 +203,8 @@ GType gst_v4l2_object_get_type (void);
     PROP_CAPTURE_IO_MODE,     \
     PROP_EXTRA_CONTROLS,      \
     PROP_PIXEL_ASPECT_RATIO,  \
-    PROP_FORCE_ASPECT_RATIO
+    PROP_FORCE_ASPECT_RATIO,  \
+    PROP_SELECTION
 
 /* create/destroy */
 GstV4l2Object*  gst_v4l2_object_new       (GstElement * element,
@@ -281,6 +287,7 @@ gboolean      gst_v4l2_object_propose_allocation (GstV4l2Object * obj,
 
 GstStructure * gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc);
 
+gboolean gst_v4l2_object_try_set_selection (GstV4l2Object * obj);
 
 #define GST_IMPLEMENT_V4L2_PROBE_METHODS(Type_Class, interface_as_function)                 \
                                                                                             \

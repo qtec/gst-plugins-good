@@ -420,6 +420,30 @@ gst_v4l2_object_install_properties_helper (GObjectClass * gobject_class,
           "When enabled, the pixel aspect ratio will be enforced", TRUE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstV4l2Src:selection:
+   *
+   * Sets the selection for the device. Selection information is passed as
+   * a gst_structure string, named crop or compose accordingly and containing
+   * the cropping/composing rect info and flag info. Ommitted fields are completed
+   * based on the device default values.
+   *
+   * Since: 1.5.x
+   */
+  g_object_class_install_property (gobject_class, PROP_SELECTION,
+      g_param_spec_boxed ("selection", "Set selection for the target device",
+          "Sets the selection region for the target device. Selection can be\n"
+          "either crop or compose, which is defined by the name on the passed\n"
+          "structure. A selection structure can have the following properties:\n"
+          " - rectangles : The number of selection rectangles. Defaults to 1\n"
+          " - left, width, top(x), height(x): Sets the cropping region. Unset "
+          "fields are set to default\n based on the device parameters. If "
+          "there are more then 1 rectangles, the top and height\n"
+          "fields are expected to be numbered: top0=1,top1=100\n"
+          " - flags: The flags of the selection structure, can be a string\n"
+          "containing G L or KC, case insensitive. e.g. flags=GKC",
+          GST_TYPE_STRUCTURE, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+
 }
 
 void
@@ -522,6 +546,12 @@ gst_v4l2_object_destroy (GstV4l2Object * v4l2object)
   if (v4l2object->extra_controls) {
     gst_structure_free (v4l2object->extra_controls);
   }
+
+  if (v4l2object->target_crop)
+    gst_structure_free (v4l2object->target_crop);
+
+  if (v4l2object->target_compose)
+    gst_structure_free (v4l2object->target_compose);
 
   g_free (v4l2object);
 }
@@ -662,6 +692,23 @@ gst_v4l2_object_set_property_helper (GstV4l2Object * v4l2object,
     case PROP_FORCE_ASPECT_RATIO:
       v4l2object->keep_aspect = g_value_get_boolean (value);
       break;
+    case PROP_SELECTION:{
+      const GstStructure *s = gst_value_get_structure (value);
+      if (gst_structure_has_name (s, "crop")) {
+        if (v4l2object->target_crop)
+          gst_structure_free (v4l2object->target_crop);
+
+        v4l2object->target_crop = s ? gst_structure_copy (s) : NULL;
+      } else if (gst_structure_has_name (s, "compose")) {
+        if (v4l2object->target_compose)
+          gst_structure_free (v4l2object->target_compose);
+
+        v4l2object->target_compose = s ? gst_structure_copy (s) : NULL;
+      } else
+        GST_WARNING_OBJECT (v4l2object, "Illegal selection structure name '%s'",
+            gst_structure_get_name (s));
+      break;
+    }
     default:
       return FALSE;
       break;
@@ -4249,4 +4296,326 @@ different_caps:
     GST_DEBUG_OBJECT (obj->element, "pool has different caps");
     return FALSE;
   }
+}
+
+static gboolean
+parse_selection_struct (GstV4l2Object * obj, struct v4l2_selection *sel,
+    struct v4l2_selection *bounds, GstStructure * s, const gchar * structname)
+{
+  gint val, rects, i, left, width;
+  gsize toplen, heightlen;
+  const gchar *str;
+  struct v4l2_rect *trect;
+  gboolean changed = FALSE;
+  GString *topstr, *heightstr;
+  if (s == NULL) {
+    GST_WARNING_OBJECT (obj, "No selection struct set, passing");
+    return FALSE;
+  }
+
+  if (structname != NULL && !gst_structure_has_name (s, structname)) {
+    GST_WARNING_OBJECT (obj, "Selection struct is not named %s, name: %s",
+        structname, gst_structure_get_name (s));
+    return FALSE;
+  }
+
+  /* single region case */
+  if (!gst_structure_get_int (s, "rectangles", &val)) {
+    if (gst_structure_get_int (s, "left", &val)) {
+      if (bounds->r.left <= val) {
+        sel->r.left = val;
+        changed = TRUE;
+      }
+    }
+
+    if (gst_structure_get_int (s, "top", &val)) {
+      if (bounds->r.top <= val) {
+        sel->r.top = val;
+        changed = TRUE;
+      }
+    }
+
+    if (gst_structure_get_int (s, "height", &val)) {
+      if (bounds->r.height >= val) {
+        sel->r.height = val;
+        changed = TRUE;
+      }
+    }
+
+    if (gst_structure_get_int (s, "width", &val)) {
+      if (bounds->r.width >= val) {
+        sel->r.width = val;
+        changed = TRUE;
+      }
+    }
+  }
+  /* multiregion case */
+  else {
+    rects = val;
+
+    if (rects < 1) {
+      GST_ERROR_OBJECT (obj, "Incorrect value for 'rectangles' %d", rects);
+      return FALSE;
+    }
+
+    GST_DEBUG_OBJECT (obj, "Perfoming multiselection, region number %d", rects);
+    sel->rectangles = rects;
+    sel->pr = (struct v4l2_ext_rect *) g_new0 (struct v4l2_ext_rect, rects);
+    /* set values to default */
+    topstr = g_string_new ("top");
+    toplen = topstr->len;
+    heightstr = g_string_new ("height");
+    heightlen = heightstr->len;
+    //memset (&sel->r, 0, sizeof(struct v4l2_rect));
+
+    if (gst_structure_get_int (s, "left", &val)) {
+      if (bounds->r.left <= val) {
+        left = val;
+        changed = TRUE;
+      }
+    }
+
+    if (gst_structure_get_int (s, "width", &val)) {
+      if (bounds->r.width >= val) {
+        width = val;
+        changed = TRUE;
+      }
+    }
+
+    for (i = 0; i < rects; i++) {
+      g_string_truncate (topstr, toplen);
+      g_string_append_printf (topstr, "%d", i);
+      g_string_truncate (heightstr, heightlen);
+      g_string_append_printf (heightstr, "%d", i);
+
+      trect = &sel->pr[i].r;
+      trect->left = left;
+      trect->width = width;
+      if (i == 0)
+        trect->top = 0;
+      else
+        trect->top = sel->pr[i - 1].r.top + sel->pr[i - 1].r.height;
+      trect->height = 1;
+      GST_DEBUG_OBJECT (obj, "Setting fields for selection area: %d", i);
+      if (gst_structure_get_int (s, topstr->str, &val)) {
+        if (bounds->r.top <= val) {
+          GST_DEBUG_OBJECT (obj, "Setting top to %d", val);
+          trect->top = val;
+          changed = TRUE;
+        }
+      }
+
+      if (gst_structure_get_int (s, heightstr->str, &val)) {
+        if (bounds->r.height >= val) {
+          GST_DEBUG_OBJECT (obj, "Setting height to %d", val);
+          trect->height = val;
+          changed = TRUE;
+        }
+      }
+    }
+    g_string_free (topstr, TRUE);
+    g_string_free (heightstr, TRUE);
+  }
+
+  str = gst_structure_get_string (s, "flags");
+  if (str) {
+    if (strstr (str, "g") || strstr (str, "G")) {
+      sel->flags |= V4L2_SEL_FLAG_GE;
+      changed = TRUE;
+    }
+    if (strstr (str, "l") || strstr (str, "L")) {
+      sel->flags |= V4L2_SEL_FLAG_LE;
+      changed = TRUE;
+    }
+    if (strstr (str, "kc") || strstr (str, "KC")) {
+      sel->flags |= V4L2_SEL_FLAG_KEEP_CONFIG;
+      changed = TRUE;
+    }
+  }
+
+  if (!changed) {
+    GST_WARNING_OBJECT (obj,
+        "Selection structure has no effect: '%" GST_PTR_FORMAT "'", s);
+    goto cleanup;
+  }
+
+  return TRUE;
+cleanup:
+  if (sel->pr)
+    g_free (sel->pr);
+  return FALSE;
+}
+
+static gboolean
+gst_v4l2_object_try_set_selection_crop (GstV4l2Object * obj)
+{
+  gint i;
+  struct v4l2_selection bounds = {
+    .target = V4L2_SEL_TGT_CROP_BOUNDS,
+  };
+
+  struct v4l2_selection sel = {
+    .target = V4L2_SEL_TGT_CROP_DEFAULT,
+  };
+  guint32 type;
+
+  /* no cropping defined */
+  if (!obj->target_crop)
+    return TRUE;
+
+  if (!obj->selection_api_available) {
+    GST_WARNING_OBJECT (obj, "Selection api is not available, cannot crop");
+    return FALSE;
+  }
+
+  /* The selection api requires that mplanar types be set as non planar */
+  if (obj->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  else if (obj->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+  else
+    type = obj->type;
+
+  bounds.type = type;
+
+  /*initialize sel to defaults */
+  sel.type = type;
+
+  /* get the cropping defaults */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_G_SELECTION, &sel) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_G_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+  sel.target = V4L2_SEL_TGT_CROP;
+  /* get the cropping bounds */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_G_SELECTION, &bounds) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_G_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  /* try parsing cropping struct */
+  if (!parse_selection_struct (obj, &sel, &bounds, obj->target_crop, "crop")) {
+    GST_WARNING_OBJECT (obj, "Unable to parse selection struct, failing");
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (obj, "Setting cropping based on structure: %" GST_PTR_FORMAT,
+      obj->target_crop);
+
+  /* apply cropping */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_S_SELECTION, &sel) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_S_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  if (sel.rectangles == 0) {
+    GST_INFO_OBJECT (obj,
+        "Single crop set. Cropping set to: l:%d, t:%d, w:%d, h:%d",
+        sel.r.left, sel.r.top, sel.r.width, sel.r.height);
+  } else {
+    GST_INFO_OBJECT (obj, "Multicrop set. Region number %d", sel.rectangles);
+    for (i = 0; i < sel.rectangles; i++) {
+      GST_INFO_OBJECT (obj, "Area %d set to: l:%d, t:%d, w:%d, h:%d",
+          i, sel.pr[i].r.left, sel.pr[i].r.top,
+          sel.pr[i].r.width, sel.pr[i].r.height);
+    }
+    g_free (sel.pr);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_v4l2_object_try_set_selection_compose (GstV4l2Object * obj)
+{
+
+  gint i;
+  struct v4l2_selection bounds = {
+    .target = V4L2_SEL_TGT_COMPOSE_BOUNDS,
+  };
+
+  struct v4l2_selection sel = {
+    .target = V4L2_SEL_TGT_COMPOSE_DEFAULT,
+  };
+  guint32 type;
+
+  /* no compose defined */
+  if (!obj->target_compose)
+    return TRUE;
+
+  if (!obj->selection_api_available) {
+    GST_WARNING_OBJECT (obj, "Selection api is not available, cannot compose");
+    return FALSE;
+  }
+
+  /* The selection api requires that mplanar types be set as non planar */
+  if (obj->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  else if (obj->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+  else
+    type = obj->type;
+
+  bounds.type = type;
+
+  /*initialize sel to defaults */
+  sel.type = type;
+
+  /* get the compose defaults */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_G_SELECTION, &sel) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_G_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+  sel.target = V4L2_SEL_TGT_COMPOSE;
+  /* get the compose bounds */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_G_SELECTION, &bounds) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_G_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  /* try parsing compose struct */
+  if (!parse_selection_struct (obj, &sel, &bounds, obj->target_compose,
+          "compose")) {
+    GST_WARNING_OBJECT (obj, "Unable to parse selection struct, failing");
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (obj, "Setting compose based on structure: %" GST_PTR_FORMAT,
+      obj->target_compose);
+
+  /* apply compose */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_S_SELECTION, &sel) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_S_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  if (sel.rectangles == 0) {
+    GST_INFO_OBJECT (obj,
+        "Single compose set. Compose set to: l:%d, t:%d, w:%d, h:%d",
+        sel.r.left, sel.r.top, sel.r.width, sel.r.height);
+  } else {
+    GST_INFO_OBJECT (obj, "Multicompose set. Region number %d", sel.rectangles);
+    for (i = 0; i < sel.rectangles; i++) {
+      GST_INFO_OBJECT (obj, "Area %d set to: l:%d, t:%d, w:%d, h:%d",
+          i, sel.pr[i].r.left, sel.pr[i].r.top,
+          sel.pr[i].r.width, sel.pr[i].r.height);
+    }
+    g_free (sel.pr);
+  }
+
+  return TRUE;
+}
+
+gboolean
+gst_v4l2_object_try_set_selection (GstV4l2Object * obj)
+{
+  if (!gst_v4l2_object_try_set_selection_crop (obj))
+    return FALSE;
+  return gst_v4l2_object_try_set_selection_compose (obj);
 }

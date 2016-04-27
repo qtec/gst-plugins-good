@@ -510,6 +510,118 @@ gst_v4l2_adjust_buf_type (GstV4l2Object * v4l2object)
 }
 
 /******************************************************
+ * gst_v4l2_get_selection_capabilities():
+ *   initializes and checks selection capabilites
+ * return value: TRUE on success, FALSE on error
+ ******************************************************/
+static gboolean
+gst_v4l2_get_selection_capabilities (GstV4l2Object * v4l2object)
+{
+  struct v4l2_selection crop = {
+    .type = v4l2object->type,
+  };
+
+  struct v4l2_selection compose = {
+    .type = v4l2object->type,
+  };
+
+  GST_DEBUG_OBJECT (v4l2object->element, "Getting selection capabilites");
+
+  if (!GST_V4L2_IS_OPEN (v4l2object))
+    return FALSE;
+
+  v4l2object->selection_api_available = FALSE;
+
+  /* get cropping defaults */
+  crop.target = V4L2_SEL_TGT_CROP_DEFAULT;
+  if (v4l2_ioctl (v4l2object->video_fd, VIDIOC_G_SELECTION, &crop) < 0)
+    goto crop_g_failed;
+
+  /* test setting crop to default */
+  crop.target = V4L2_SEL_TGT_CROP;
+  if (v4l2_ioctl (v4l2object->video_fd, VIDIOC_S_SELECTION, &crop) < 0)
+    goto crop_s_failed;
+
+  /* get compose defaults */
+  compose.target = V4L2_SEL_TGT_COMPOSE_DEFAULT;
+  if (v4l2_ioctl (v4l2object->video_fd, VIDIOC_G_SELECTION, &compose) < 0)
+    goto compose_g_failed;
+
+  /* test setting compose to default */
+  compose.target = V4L2_SEL_TGT_COMPOSE;
+  if (v4l2_ioctl (v4l2object->video_fd, VIDIOC_S_SELECTION, &compose) < 0)
+    goto compose_s_failed;
+
+  v4l2object->selection_api_available = TRUE;
+
+  GST_LOG_OBJECT (v4l2object->element, "Selection api available, "
+      "cropping window default top:%d, left:%d, width:%d, height:%d, "
+      "compose window default top:%d, left:%d, width:%d, height:%d",
+      crop.r.top, crop.r.left, crop.r.width, crop.r.height,
+      compose.r.top, compose.r.left, compose.r.width, compose.r.height);
+
+  return TRUE;
+
+  /* ERRORS */
+crop_g_failed:
+  {
+    if (errno == EINVAL || errno == ENOTTY) {
+      GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+          (_("Selection API is not supported for device '%s'."),
+              v4l2object->videodev), GST_ERROR_SYSTEM);
+      return TRUE;
+    }
+    GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+        (_("Error getting default cropping selection for device '%s'"),
+            v4l2object->videodev), GST_ERROR_SYSTEM);
+    return FALSE;
+  }
+
+crop_s_failed:
+  {
+    if (errno == EINVAL || errno == ENOTTY) {
+      GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+          (_("Selection API is not supported for device '%s'."),
+              v4l2object->videodev), GST_ERROR_SYSTEM);
+      return TRUE;
+    }
+    GST_ELEMENT_ERROR (v4l2object->element, RESOURCE, SETTINGS,
+        (_("Error setting cropping selection for device '%s'"),
+            v4l2object->videodev), GST_ERROR_SYSTEM);
+    return FALSE;
+  }
+
+compose_g_failed:
+  {
+    if (errno == EINVAL || errno == ENOTTY) {
+      GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+          (_("Selection API is not supported for device '%s'."),
+              v4l2object->videodev), GST_ERROR_SYSTEM);
+      return TRUE;
+    }
+    GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+        (_("Error getting default compose selection for device '%s'"),
+            v4l2object->videodev), GST_ERROR_SYSTEM);
+    return FALSE;
+  }
+
+compose_s_failed:
+  {
+    if (errno == EINVAL || errno == ENOTTY) {
+      GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+          (_("Selection API is not supported for device '%s'."),
+              v4l2object->videodev), GST_ERROR_SYSTEM);
+      return TRUE;
+    }
+    GST_ELEMENT_WARNING (v4l2object->element, RESOURCE, SETTINGS,
+        (_("Error setting compose selection for device '%s'"),
+            v4l2object->videodev), GST_ERROR_SYSTEM);
+    return FALSE;
+  }
+
+}
+
+/******************************************************
  * gst_v4l2_open():
  *   open the video device (v4l2object->videodev)
  * return value: TRUE on success, FALSE on error
@@ -580,6 +692,9 @@ gst_v4l2_open (GstV4l2Object * v4l2object)
               (v4l2object->device_caps &
                   (V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_VIDEO_OUTPUT_MPLANE)))))
     goto not_m2m;
+
+  /* test for the selection api */
+  gst_v4l2_get_selection_capabilities (v4l2object);
 
   gst_v4l2_adjust_buf_type (v4l2object);
 
