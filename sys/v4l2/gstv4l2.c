@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "ext/videodev2.h"
+#include <linux/videodev2.h>
 #include "v4l2-utils.h"
 
 #include "gstv4l2object.h"

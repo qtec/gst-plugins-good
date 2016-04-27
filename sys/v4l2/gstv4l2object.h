@@ -24,7 +24,7 @@
 #ifndef __GST_V4L2_OBJECT_H__
 #define __GST_V4L2_OBJECT_H__
 
-#include "ext/videodev2.h"
+#include <linux/videodev2.h>
 #include "v4l2-utils.h"
 
 #include <gst/gst.h>

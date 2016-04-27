@@ -23,7 +23,7 @@
 #ifndef __GST_V4L2_ALLOCATOR_H__
 #define __GST_V4L2_ALLOCATOR_H__
 
-#include "ext/videodev2.h"
+#include <linux/videodev2.h>
 #include <gst/gst.h>
 #include <gst/gstatomicqueue.h>
 
