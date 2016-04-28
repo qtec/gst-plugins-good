@@ -1473,6 +1473,9 @@ gst_v4l2_object_v4l2fourcc_to_bare_struct (guint32 fourcc)
     case V4L2_PIX_FMT_GREY:    /*  8  Greyscale     */
     case V4L2_PIX_FMT_Y16:
     case V4L2_PIX_FMT_Y16_BE:
+    case V4L2_PIX_FMT_QTEC_GREEN8:
+    case V4L2_PIX_FMT_QTEC_GREEN16:
+    case V4L2_PIX_FMT_QTEC_GREEN16_BE:
     case V4L2_PIX_FMT_XRGB555:
     case V4L2_PIX_FMT_RGB555:
     case V4L2_PIX_FMT_XRGB555X:
