@@ -448,6 +448,17 @@ gst_v4l2_object_install_properties_helper (GObjectClass * gobject_class,
           GST_TYPE_STRUCTURE, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   /**
+   * GstV4l2Src:center-input:
+   *
+   * Automatically handles input centering using cropping
+   */
+  g_object_class_install_property (gobject_class, PROP_CENTER_INPUT,
+      g_param_spec_boolean ("center-input", "Center Input",
+          "When enabled, the image input is centered. "
+          "Only works if a selection has not been set", FALSE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
    * GstV4l2Src:useqtecgreen:
    *
    * Weather to use standard gray or custom gray
@@ -534,6 +545,8 @@ gst_v4l2_object_new (GstElement * element,
   v4l2object->no_initial_format = FALSE;
 
   v4l2object->useqtecgreen = FALSE;
+
+  v4l2object->center_input = FALSE;
 
   return v4l2object;
 }
@@ -727,6 +740,9 @@ gst_v4l2_object_set_property_helper (GstV4l2Object * v4l2object,
     case PROP_USE_QTEC_GREEN:
       v4l2object->useqtecgreen = g_value_get_boolean (value);
       break;
+    case PROP_CENTER_INPUT:
+      v4l2object->center_input = g_value_get_boolean (value);
+      break;
     default:
       return FALSE;
       break;
@@ -829,6 +845,9 @@ gst_v4l2_object_get_property_helper (GstV4l2Object * v4l2object,
       break;
     case PROP_USE_QTEC_GREEN:
       g_value_set_boolean (value, v4l2object->useqtecgreen);
+      break;
+    case PROP_CENTER_INPUT:
+      g_value_set_boolean (value, v4l2object->center_input);
       break;
     default:
       return FALSE;
@@ -4654,10 +4673,76 @@ gst_v4l2_object_try_set_selection_compose (GstV4l2Object * obj)
   return TRUE;
 }
 
+static gboolean
+gst_v4l2_object_try_center_input (GstV4l2Object * obj)
+{
+  struct v4l2_selection bounds = {
+    .target = V4L2_SEL_TGT_CROP_BOUNDS,
+  };
+
+  struct v4l2_selection sel = {
+    .target = V4L2_SEL_TGT_CROP,
+  };
+  guint32 type;
+
+  if (obj->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+    return TRUE;
+
+  if (!obj->selection_api_available) {
+    GST_WARNING_OBJECT (obj,
+        "Selection api is not available, cannot center image");
+    return FALSE;
+  }
+
+  /* The selection api requires that mplanar types be set as non planar */
+  if (obj->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  else if (obj->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+  else
+    type = obj->type;
+
+  bounds.type = type;
+  /*initialize sel to defaults */
+  sel.type = type;
+
+  /* get the bounds */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_G_SELECTION, &bounds) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_G_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  /* center the image */
+  sel.r.left = bounds.r.width / 2 - obj->format.fmt.pix.width / 2;
+  sel.r.top = bounds.r.height / 2 - obj->format.fmt.pix.height / 2;
+  sel.r.width = obj->format.fmt.pix.width;
+  sel.r.height = obj->format.fmt.pix.height;
+
+  GST_INFO_OBJECT (obj, "Trying to center at: l:%d t:%d w:%d h:%d",
+      sel.r.left, sel.r.top, sel.r.width, sel.r.height);
+
+  /* apply cropping */
+  if (v4l2_ioctl (obj->video_fd, VIDIOC_S_SELECTION, &sel) != 0) {
+    GST_ERROR_OBJECT (obj, "VIDIOC_S_SELECTION failed");
+    GST_ERROR_OBJECT (obj, "reason: %s", g_strerror (errno));
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (obj, "Centering selection returned: l:%d t:%d w:%d h:%d",
+      sel.r.left, sel.r.top, sel.r.width, sel.r.height);
+
+  return TRUE;
+}
+
 gboolean
 gst_v4l2_object_try_set_selection (GstV4l2Object * obj)
 {
-  if (!gst_v4l2_object_try_set_selection_crop (obj))
-    return FALSE;
-  return gst_v4l2_object_try_set_selection_compose (obj);
+  if (obj->target_crop || obj->target_compose) {
+    if (!gst_v4l2_object_try_set_selection_crop (obj))
+      return FALSE;
+    return gst_v4l2_object_try_set_selection_compose (obj);
+  } else if (obj->center_input) {
+    return gst_v4l2_object_try_center_input (obj);
+  }
 }
