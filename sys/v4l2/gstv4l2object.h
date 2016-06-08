@@ -180,7 +180,8 @@ struct _GstV4l2Object {
   GstStructure *target_crop;
   GstStructure *target_compose;
 
-  gboolean useqtecgreen;
+  gboolean useqtecgreen, useqtechsv,
+    useqtec_h_in_rgb, useqtec_y_in_rgb;
   gboolean center_input;
 };
 
@@ -208,8 +209,11 @@ GType gst_v4l2_object_get_type (void);
     PROP_PIXEL_ASPECT_RATIO,  \
     PROP_FORCE_ASPECT_RATIO,  \
     PROP_SELECTION,           \
+    PROP_CENTER_INPUT,        \
     PROP_USE_QTEC_GREEN,      \
-    PROP_CENTER_INPUT
+    PROP_USE_QTEC_HSV,        \
+    PROP_USE_QTEC_H_IN_RGB,   \
+    PROP_USE_QTEC_Y_IN_RGB
 
 /* create/destroy */
 GstV4l2Object*  gst_v4l2_object_new       (GstElement * element,

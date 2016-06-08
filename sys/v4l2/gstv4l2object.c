@@ -191,6 +191,13 @@ static const GstV4L2FormatDesc gst_v4l2_formats[] = {
   {V4L2_PIX_FMT_SN9C10X, TRUE, GST_V4L2_CODEC},
   {V4L2_PIX_FMT_PWC1, TRUE, GST_V4L2_CODEC},
   {V4L2_PIX_FMT_PWC2, TRUE, GST_V4L2_CODEC},
+  /* QTec HSV based formats */
+  {V4L2_PIX_FMT_QTEC_HSV24, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_HSV32, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_HRGB, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_YRGB, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_BGRH, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_QTEC_BGRY, TRUE, GST_V4L2_RAW},
 };
 
 #define GST_V4L2_FORMAT_COUNT (G_N_ELEMENTS (gst_v4l2_formats))
@@ -459,15 +466,29 @@ gst_v4l2_object_install_properties_helper (GObjectClass * gobject_class,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GstV4l2Src:useqtecgreen:
+   * GstV4l2Src:useqtec_x_:
    *
-   * Weather to use standard gray or custom gray
+   * Switches for using qtec altenate formats
    */
   g_object_class_install_property (gobject_class, PROP_USE_QTEC_GREEN,
       g_param_spec_boolean ("useqtecgreen", "Use QTec Green",
           "When enabled, QTec green will be used instead of standard grey",
           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_USE_QTEC_HSV,
+      g_param_spec_boolean ("useqtechsv", "Use QTec HSV",
+          "When enabled, QTec HSV24 and HSV32 will replace RGB24 and RGB32/xRGB",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_USE_QTEC_H_IN_RGB,
+      g_param_spec_boolean ("useqtec-h-in-rgb", "Use QTec H in RGB",
+          "When enabled, QTec HRGB and BGRH will replace xRGB and BGRx",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_USE_QTEC_Y_IN_RGB,
+      g_param_spec_boolean ("useqtec-y-in-rgb", "Use QTec Y in RGB",
+          "When enabled, QTec YRGB and BGRY will replace xRGB and BGRx",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 void
@@ -545,6 +566,12 @@ gst_v4l2_object_new (GstElement * element,
   v4l2object->no_initial_format = FALSE;
 
   v4l2object->useqtecgreen = FALSE;
+
+  v4l2object->useqtechsv = FALSE;
+
+  v4l2object->useqtec_h_in_rgb = FALSE;
+
+  v4l2object->useqtec_y_in_rgb = FALSE;
 
   v4l2object->center_input = FALSE;
 
@@ -737,11 +764,20 @@ gst_v4l2_object_set_property_helper (GstV4l2Object * v4l2object,
             gst_structure_get_name (s));
       break;
     }
+    case PROP_CENTER_INPUT:
+      v4l2object->center_input = g_value_get_boolean (value);
+      break;
     case PROP_USE_QTEC_GREEN:
       v4l2object->useqtecgreen = g_value_get_boolean (value);
       break;
-    case PROP_CENTER_INPUT:
-      v4l2object->center_input = g_value_get_boolean (value);
+    case PROP_USE_QTEC_HSV:
+      v4l2object->useqtechsv = g_value_get_boolean (value);
+      break;
+    case PROP_USE_QTEC_H_IN_RGB:
+      v4l2object->useqtec_h_in_rgb = g_value_get_boolean (value);
+      break;
+    case PROP_USE_QTEC_Y_IN_RGB:
+      v4l2object->useqtec_y_in_rgb = g_value_get_boolean (value);
       break;
     default:
       return FALSE;
@@ -843,11 +879,20 @@ gst_v4l2_object_get_property_helper (GstV4l2Object * v4l2object,
     case PROP_FORCE_ASPECT_RATIO:
       g_value_set_boolean (value, v4l2object->keep_aspect);
       break;
+    case PROP_CENTER_INPUT:
+      g_value_set_boolean (value, v4l2object->center_input);
+      break;
     case PROP_USE_QTEC_GREEN:
       g_value_set_boolean (value, v4l2object->useqtecgreen);
       break;
-    case PROP_CENTER_INPUT:
-      g_value_set_boolean (value, v4l2object->center_input);
+    case PROP_USE_QTEC_HSV:
+      g_value_set_boolean (value, v4l2object->useqtechsv);
+      break;
+    case PROP_USE_QTEC_H_IN_RGB:
+      g_value_set_boolean (value, v4l2object->useqtec_h_in_rgb);
+      break;
+    case PROP_USE_QTEC_Y_IN_RGB:
+      g_value_set_boolean (value, v4l2object->useqtec_y_in_rgb);
       break;
     default:
       return FALSE;
@@ -1781,22 +1826,39 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
         fourcc = V4L2_PIX_FMT_RGB565;
         break;
       case GST_VIDEO_FORMAT_RGB:
-        fourcc = V4L2_PIX_FMT_RGB24;
+        if (v4l2object->useqtechsv)
+          fourcc = V4L2_PIX_FMT_QTEC_HSV24;
+        else
+          fourcc = V4L2_PIX_FMT_RGB24;
         break;
       case GST_VIDEO_FORMAT_BGR:
         fourcc = V4L2_PIX_FMT_BGR24;
         break;
       case GST_VIDEO_FORMAT_xRGB:
-        fourcc = V4L2_PIX_FMT_RGB32;
-        fourcc_nc = V4L2_PIX_FMT_XRGB32;
+        if (v4l2object->useqtechsv)
+          fourcc = V4L2_PIX_FMT_QTEC_HSV32;
+        else if (v4l2object->useqtec_y_in_rgb)
+          fourcc = V4L2_PIX_FMT_QTEC_YRGB;
+        else if (v4l2object->useqtec_h_in_rgb)
+          fourcc = V4L2_PIX_FMT_QTEC_HRGB;
+        else {
+          fourcc = V4L2_PIX_FMT_RGB32;
+          fourcc_nc = V4L2_PIX_FMT_XRGB32;
+        }
         break;
       case GST_VIDEO_FORMAT_ARGB:
         fourcc = V4L2_PIX_FMT_RGB32;
         fourcc_nc = V4L2_PIX_FMT_ARGB32;
         break;
       case GST_VIDEO_FORMAT_BGRx:
-        fourcc = V4L2_PIX_FMT_BGR32;
-        fourcc_nc = V4L2_PIX_FMT_XBGR32;
+        if (v4l2object->useqtec_y_in_rgb)
+          fourcc = V4L2_PIX_FMT_QTEC_BGRY;
+        else if (v4l2object->useqtec_h_in_rgb)
+          fourcc = V4L2_PIX_FMT_QTEC_BGRH;
+        else {
+          fourcc = V4L2_PIX_FMT_BGR32;
+          fourcc_nc = V4L2_PIX_FMT_XBGR32;
+        }
         break;
       case GST_VIDEO_FORMAT_BGRA:
         fourcc = V4L2_PIX_FMT_BGR32;
