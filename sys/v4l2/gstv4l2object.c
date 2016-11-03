@@ -192,8 +192,8 @@ static const GstV4L2FormatDesc gst_v4l2_formats[] = {
   {V4L2_PIX_FMT_PWC1, TRUE, GST_V4L2_CODEC},
   {V4L2_PIX_FMT_PWC2, TRUE, GST_V4L2_CODEC},
   /* QTec HSV based formats */
-  {V4L2_PIX_FMT_QTEC_HSV24, TRUE, GST_V4L2_RAW},
-  {V4L2_PIX_FMT_QTEC_HSV32, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_HSV24, TRUE, GST_V4L2_RAW},
+  {V4L2_PIX_FMT_HSV32, TRUE, GST_V4L2_RAW},
   {V4L2_PIX_FMT_QTEC_HRGB, TRUE, GST_V4L2_RAW},
   {V4L2_PIX_FMT_QTEC_YRGB, TRUE, GST_V4L2_RAW},
   {V4L2_PIX_FMT_QTEC_BGRH, TRUE, GST_V4L2_RAW},
@@ -1827,7 +1827,7 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
         break;
       case GST_VIDEO_FORMAT_RGB:
         if (v4l2object->useqtechsv)
-          fourcc = V4L2_PIX_FMT_QTEC_HSV24;
+          fourcc = V4L2_PIX_FMT_HSV24;
         else
           fourcc = V4L2_PIX_FMT_RGB24;
         break;
@@ -1836,7 +1836,7 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
         break;
       case GST_VIDEO_FORMAT_xRGB:
         if (v4l2object->useqtechsv)
-          fourcc = V4L2_PIX_FMT_QTEC_HSV32;
+          fourcc = V4L2_PIX_FMT_HSV32;
         else if (v4l2object->useqtec_y_in_rgb)
           fourcc = V4L2_PIX_FMT_QTEC_YRGB;
         else if (v4l2object->useqtec_h_in_rgb)
