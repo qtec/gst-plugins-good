@@ -104,6 +104,8 @@ struct _GstMultiFileSink
   gboolean aggregate_gops;
   GstAdapter *gop_adapter;  /* to aggregate GOPs */
   GList *potential_next_gop;	/* To detect false-positives */
+
+  GstClockTime min_keyframe_file_duration;
 };
 
 struct _GstMultiFileSinkClass
