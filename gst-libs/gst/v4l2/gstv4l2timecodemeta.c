@@ -42,6 +42,16 @@ gst_v4l2_timecode_meta_api_get_type (void)
   return type;
 }
 
+gboolean
+gst_v4l2_timecode_meta_init (GstMeta * meta, gpointer params,
+    GstBuffer * buffer)
+{
+  GstV4l2TimecodeMeta *m = (GstV4l2TimecodeMeta *) meta;
+  memset (&m->timecode, 0x0, sizeof (m->timecode));
+
+  return TRUE;
+}
+
 static gboolean
 gst_v4l2_timecode_meta_transform (GstBuffer * transbuf, GstMeta * meta,
     GstBuffer * buffer, GQuark type, gpointer data)
@@ -62,7 +72,7 @@ gst_v4l2_timecode_meta_get_info (void)
     const GstMetaInfo *mi = gst_meta_register (GST_V4L2_TIMECODE_META_API_TYPE,
         GST_V4L2_TIMECODE_META_IMPL_NAME,
         sizeof (GstV4l2TimecodeMeta),
-        NULL,
+        gst_v4l2_timecode_meta_init,
         NULL,
         gst_v4l2_timecode_meta_transform);
     g_once_init_leave (&meta_info, mi);
