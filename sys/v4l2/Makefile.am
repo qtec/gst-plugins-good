@@ -33,6 +33,8 @@ libgstvideo4linux2_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 libgstvideo4linux2_la_LIBADD =   $(GST_PLUGINS_BASE_LIBS) \
 				 -lgstallocators-$(GST_API_VERSION) \
 				 -lgstvideo-$(GST_API_VERSION) \
+				 $(top_builddir)/gst-libs/gst/v4l2/libgstv4l2timecodemeta-$(GST_API_VERSION).la \
+				 -lgstv4l2timecodemeta-$(GST_API_VERSION) \
 				 $(GST_BASE_LIBS) \
 				 $(GST_LIBS) \
 				 $(LIBV4L2_LIBS) \
@@ -40,10 +42,6 @@ libgstvideo4linux2_la_LIBADD =   $(GST_PLUGINS_BASE_LIBS) \
 				 $(LIBRT)
 
 noinst_HEADERS = \
-	ext/types-compat.h \
-	ext/v4l2-common.h \
-	ext/v4l2-controls.h \
-	ext/videodev2.h \
 	gstv4l2allocator.h \
 	gstv4l2bufferpool.h \
 	gstv4l2colorbalance.h \
@@ -61,4 +59,3 @@ noinst_HEADERS = \
 	tuner.h \
 	tunerchannel.h \
 	tunernorm.h
-

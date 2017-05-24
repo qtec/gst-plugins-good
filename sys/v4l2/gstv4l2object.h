@@ -24,7 +24,7 @@
 #ifndef __GST_V4L2_OBJECT_H__
 #define __GST_V4L2_OBJECT_H__
 
-#include "ext/videodev2.h"
+#include <linux/videodev2.h>
 #include "v4l2-utils.h"
 
 #include <gst/gst.h>
@@ -174,6 +174,15 @@ struct _GstV4l2Object {
   /* Allow to skip reading initial format through G_FMT. Some devices
    * just fails if you don't call S_FMT first. (ex: M2M decoders) */
   gboolean no_initial_format;
+
+  /* selection api variables */
+  gboolean selection_api_available;
+  GstStructure *target_crop;
+  GstStructure *target_compose;
+
+  gboolean useqtecgreen, useqtechsv,
+    useqtec_h_in_rgb, useqtec_y_in_rgb;
+  gboolean center_input;
 };
 
 struct _GstV4l2ObjectClassHelper {
@@ -198,7 +207,13 @@ GType gst_v4l2_object_get_type (void);
     PROP_CAPTURE_IO_MODE,     \
     PROP_EXTRA_CONTROLS,      \
     PROP_PIXEL_ASPECT_RATIO,  \
-    PROP_FORCE_ASPECT_RATIO
+    PROP_FORCE_ASPECT_RATIO,  \
+    PROP_SELECTION,           \
+    PROP_CENTER_INPUT,        \
+    PROP_USE_QTEC_GREEN,      \
+    PROP_USE_QTEC_HSV,        \
+    PROP_USE_QTEC_H_IN_RGB,   \
+    PROP_USE_QTEC_Y_IN_RGB
 
 /* create/destroy */
 GstV4l2Object*  gst_v4l2_object_new       (GstElement * element,
@@ -267,6 +282,8 @@ gboolean      gst_v4l2_object_propose_allocation (GstV4l2Object * obj,
                                                   GstQuery * query);
 
 GstStructure * gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc);
+
+gboolean gst_v4l2_object_try_set_selection (GstV4l2Object * obj);
 
 G_END_DECLS
 

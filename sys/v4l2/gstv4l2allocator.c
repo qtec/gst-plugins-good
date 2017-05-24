@@ -25,7 +25,7 @@
 # define _GNU_SOURCE            /* O_CLOEXEC */
 #endif
 
-#include "ext/videodev2.h"
+#include <linux/videodev2.h>
 #include "gstv4l2allocator.h"
 #include "v4l2_calls.h"
 

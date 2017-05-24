@@ -137,6 +137,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_multi_file_sink_debug);
 #define DEFAULT_MAX_FILES 0
 #define DEFAULT_MAX_FILE_SIZE G_GUINT64_CONSTANT(2*1024*1024*1024)
 #define DEFAULT_MAX_FILE_DURATION GST_CLOCK_TIME_NONE
+#define DEFAULT_MIN_KEYFRAME_FILE_DURATION 10 * GST_SECOND
 #define DEFAULT_AGGREGATE_GOPS FALSE
 
 enum
@@ -149,7 +150,8 @@ enum
   PROP_MAX_FILES,
   PROP_MAX_FILE_SIZE,
   PROP_MAX_FILE_DURATION,
-  PROP_AGGREGATE_GOPS
+  PROP_AGGREGATE_GOPS,
+  PROP_MIN_KEYFRAME_FILE_DURATION,
 };
 
 static void gst_multi_file_sink_finalize (GObject * object);
@@ -306,6 +308,23 @@ gst_multi_file_sink_class_init (GstMultiFileSinkClass * klass)
           "splitting", DEFAULT_AGGREGATE_GOPS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstMultiFileSink:min-keyframe-file-size:
+   *
+   * The minimum size in time that every segment should have when "next-file: is
+   * set to "key-frame"
+   *
+   * Since 1.10
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_MIN_KEYFRAME_FILE_DURATION,
+      g_param_spec_uint64 ("min-keyframe-file-size",
+          "Next Keyframe Segment Size",
+          "Minimum file duration before starting a new file in key-frame mode",
+          0, G_MAXUINT64, DEFAULT_MIN_KEYFRAME_FILE_DURATION,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+
   gobject_class->finalize = gst_multi_file_sink_finalize;
 
   gstbasesink_class->start = GST_DEBUG_FUNCPTR (gst_multi_file_sink_start);
@@ -336,7 +355,8 @@ gst_multi_file_sink_init (GstMultiFileSink * multifilesink)
   multifilesink->max_files = DEFAULT_MAX_FILES;
   multifilesink->max_file_size = DEFAULT_MAX_FILE_SIZE;
   multifilesink->max_file_duration = DEFAULT_MAX_FILE_DURATION;
-
+  multifilesink->min_keyframe_file_duration =
+      DEFAULT_MIN_KEYFRAME_FILE_DURATION;
   multifilesink->aggregate_gops = DEFAULT_AGGREGATE_GOPS;
   multifilesink->gop_adapter = NULL;
 
@@ -398,6 +418,9 @@ gst_multi_file_sink_set_property (GObject * object, guint prop_id,
     case PROP_AGGREGATE_GOPS:
       sink->aggregate_gops = g_value_get_boolean (value);
       break;
+    case PROP_MIN_KEYFRAME_FILE_DURATION:
+      sink->min_keyframe_file_duration = g_value_get_uint64 (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -434,6 +457,9 @@ gst_multi_file_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_AGGREGATE_GOPS:
       g_value_set_boolean (value, sink->aggregate_gops);
+      break;
+    case PROP_MIN_KEYFRAME_FILE_DURATION:
+      g_value_set_uint64 (value, sink->min_keyframe_file_duration);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -654,7 +680,7 @@ gst_multi_file_sink_write_buffer (GstMultiFileSink * multifilesink,
       if (multifilesink->next_segment == GST_CLOCK_TIME_NONE) {
         if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer)) {
           multifilesink->next_segment = GST_BUFFER_TIMESTAMP (buffer) +
-              10 * GST_SECOND;
+              multifilesink->min_keyframe_file_duration;
         }
       }
 
@@ -665,7 +691,8 @@ gst_multi_file_sink_write_buffer (GstMultiFileSink * multifilesink,
           first_file = FALSE;
           gst_multi_file_sink_close_file (multifilesink, buffer);
         }
-        multifilesink->next_segment += 10 * GST_SECOND;
+        multifilesink->next_segment +=
+            multifilesink->min_keyframe_file_duration;
       }
 
       if (multifilesink->file == NULL) {

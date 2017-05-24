@@ -420,6 +420,9 @@ gst_v4l2src_set_format (GstV4l2Src * v4l2src, GstCaps * caps)
     return FALSE;
   }
 
+
+  gst_v4l2_object_try_set_selection (obj);
+
   return TRUE;
 }
 
